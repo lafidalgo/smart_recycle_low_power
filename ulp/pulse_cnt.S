@@ -58,8 +58,14 @@ edge_count_to_wake_up:
 
 	/* RTC IO number used to sample the input signal.
 	   Set by main program. */
-	.global io_number
-io_number:
+	.global io_number_addo
+io_number_addo:
+	.long 0
+
+	/* RTC IO number used to output signal.
+	   Set by main program. */
+	.global io_number_adsk
+io_number_adsk:
 	.long 0
 
 	/* Code goes into .text section */
@@ -67,7 +73,7 @@ io_number:
 	.global entry
 entry:
 	/* Load io_number */
-	move r3, io_number
+	move r3, io_number_addo
 	ld r3, r3, 0
 
 	/* Lower 16 IOs and higher need to be handled separately,

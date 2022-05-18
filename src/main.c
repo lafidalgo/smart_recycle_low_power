@@ -104,10 +104,15 @@ static void init_ulp_program(void)
                                     (ulp_main_bin_end - ulp_main_bin_start) / sizeof(uint32_t));
     ESP_ERROR_CHECK(err);
 
-    /* GPIO used for pulse counting. */
-    gpio_num_t gpio_num = GPIO_NUM_0;
-    int rtcio_num = rtc_io_number_get(gpio_num);
-    assert(rtc_gpio_is_valid_gpio(gpio_num) && "GPIO used for pulse counting must be an RTC IO");
+    /* GPIO used for do input. */
+    gpio_num_t gpio_num_addo = GPIO_NUM_25;
+    int rtcio_num_addo = rtc_io_number_get(gpio_num_addo);
+    assert(rtc_gpio_is_valid_gpio(gpio_num_addo) && "GPIO used for do must be an RTC IO");
+
+    /* GPIO used for sk input. */
+    gpio_num_t gpio_num_adsk = GPIO_NUM_26;
+    int rtcio_num_adsk = rtc_io_number_get(gpio_num_adsk);
+    assert(rtc_gpio_is_valid_gpio(gpio_num_adsk) && "GPIO used for sk must be an RTC IO");
 
     /* Initialize some variables used by ULP program.
      * Each 'ulp_xyz' variable corresponds to 'xyz' variable in the ULP program.
@@ -121,22 +126,30 @@ static void init_ulp_program(void)
     ulp_debounce_counter = 3;
     ulp_debounce_max_count = 3;
     ulp_next_edge = 0;
-    ulp_io_number = rtcio_num; /* map from GPIO# to RTC_IO# */
+    ulp_io_number_addo = rtcio_num_addo; /* map from GPIO# to RTC_IO# */
+    ulp_io_number_adsk = rtcio_num_adsk; /* map from GPIO# to RTC_IO# */
     ulp_edge_count_to_wake_up = 10;
 
     /* Initialize selected GPIO as RTC IO, enable input, disable pullup and pulldown */
-    rtc_gpio_init(gpio_num);
-    rtc_gpio_set_direction(gpio_num, RTC_GPIO_MODE_INPUT_ONLY);
-    rtc_gpio_pulldown_dis(gpio_num);
-    rtc_gpio_pullup_dis(gpio_num);
-    rtc_gpio_hold_en(gpio_num);
+    rtc_gpio_init(gpio_num_addo);
+    rtc_gpio_set_direction(gpio_num_addo, RTC_GPIO_MODE_INPUT_ONLY);
+    rtc_gpio_pulldown_dis(gpio_num_addo);
+    rtc_gpio_pullup_dis(gpio_num_addo);
+    rtc_gpio_hold_en(gpio_num_addo);
+
+    /* Initialize selected GPIO as RTC IO, enable output, disable pullup and pulldown */
+    rtc_gpio_init(gpio_num_adsk);
+    rtc_gpio_set_direction(gpio_num_adsk, RTC_GPIO_MODE_OUTPUT_ONLY);
+    rtc_gpio_pulldown_dis(gpio_num_adsk);
+    rtc_gpio_pullup_dis(gpio_num_adsk);
+    rtc_gpio_hold_en(gpio_num_adsk);
 
     /* Disconnect GPIO12 and GPIO15 to remove current drain through
      * pullup/pulldown resistors.
      * GPIO12 may be pulled high to select flash voltage.
      */
-    //rtc_gpio_isolate(GPIO_NUM_12);
-    //rtc_gpio_isolate(GPIO_NUM_15);
+    // rtc_gpio_isolate(GPIO_NUM_12);
+    // rtc_gpio_isolate(GPIO_NUM_15);
     esp_deep_sleep_disable_rom_logging(); // suppress boot messages
 
     /* Set ULP wake up period to T = 20ms.
