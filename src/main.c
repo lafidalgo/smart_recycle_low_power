@@ -27,7 +27,6 @@ extern const uint8_t ulp_main_bin_end[] asm("_binary_ulp_main_bin_end");
 static RTC_DATA_ATTR struct timeval sleep_enter_time;
 
 static void init_ulp_program(void);
-static void update_pulse_count(void);
 
 void app_main(void)
 {
@@ -58,8 +57,7 @@ void app_main(void)
     }
     case ESP_SLEEP_WAKEUP_ULP:
     {
-        printf("ULP wakeup, saving pulse count\n");
-        update_pulse_count();
+        printf("ULP wakeup\n");
         break;
     }
     case ESP_SLEEP_WAKEUP_UNDEFINED:
@@ -150,7 +148,7 @@ static void init_ulp_program(void)
      */
     // rtc_gpio_isolate(GPIO_NUM_12);
     // rtc_gpio_isolate(GPIO_NUM_15);
-    esp_deep_sleep_disable_rom_logging(); // suppress boot messages
+    // esp_deep_sleep_disable_rom_logging(); // suppress boot messages
 
     /* Set ULP wake up period to T = 20ms.
      * Minimum pulse width has to be T * (ulp_debounce_counter + 1) = 80ms.
@@ -158,33 +156,6 @@ static void init_ulp_program(void)
     ulp_set_wakeup_period(0, 20000);
 
     /* Start the program */
-    err = ulp_run(&ulp_entry - RTC_SLOW_MEM);
+    err = ulp_run(&ulp_main - RTC_SLOW_MEM);
     ESP_ERROR_CHECK(err);
-}
-
-static void update_pulse_count(void)
-{
-    const char *namespace = "plusecnt";
-    const char *count_key = "count";
-
-    ESP_ERROR_CHECK(nvs_flash_init());
-    nvs_handle_t handle;
-    ESP_ERROR_CHECK(nvs_open(namespace, NVS_READWRITE, &handle));
-    uint32_t pulse_count = 0;
-    esp_err_t err = nvs_get_u32(handle, count_key, &pulse_count);
-    assert(err == ESP_OK || err == ESP_ERR_NVS_NOT_FOUND);
-    printf("Read pulse count from NVS: %5d\n", pulse_count);
-
-    /* ULP program counts signal edges, convert that to the number of pulses */
-    uint32_t pulse_count_from_ulp = (ulp_edge_count & UINT16_MAX) / 2;
-    /* In case of an odd number of edges, keep one until next time */
-    ulp_edge_count = ulp_edge_count % 2;
-    printf("Pulse count from ULP: %5d\n", pulse_count_from_ulp);
-
-    /* Save the new pulse count to NVS */
-    pulse_count += pulse_count_from_ulp;
-    ESP_ERROR_CHECK(nvs_set_u32(handle, count_key, pulse_count));
-    ESP_ERROR_CHECK(nvs_commit(handle));
-    nvs_close(handle);
-    printf("Wrote updated pulse count to NVS: %5d\n", pulse_count);
 }
