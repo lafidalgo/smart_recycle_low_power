@@ -72,21 +72,33 @@ io_number_adsk:
 	.text
 	.global main
     main://Inicio do codigo (Entry point)
-        WRITE_RTC_REG(RTC_GPIO_OUT_W1TC_REG, RTC_GPIO_OUT_DATA_W1TC_S+7, 1, 1)//Desliga o atuador (GPIO2 = LOW)
- 
- 
- 
-    loop:
- 
-        READ_RTC_REG(RTC_GPIO_IN_REG, RTC_GPIO_IN_NEXT_S+6, 1)//Le o estado do GPIO0 e guarda no R0
-        jumpr on, 1, lt//Se o botao for pressionado (0), ativa o atuador
- 
-        WRITE_RTC_REG(RTC_GPIO_OUT_W1TC_REG, RTC_GPIO_OUT_DATA_W1TC_S+7, 1, 1)//Caso o botao nao esteja pressionado, mantem o atuador desligado
- 
- 
-    jump loop//retorna ao loop
- 
- 
-    on://ativa o atuador e retorna ao loop
-        WRITE_RTC_REG(RTC_GPIO_OUT_W1TS_REG, RTC_GPIO_OUT_DATA_W1TS_S+7, 1, 1)//Ativa o atuador (GPIO2 = HIGH)
-    jump loop
+		WRITE_RTC_REG(RTC_GPIO_OUT_W1TC_REG, RTC_GPIO_OUT_DATA_W1TC_S+7, 1, 1)//Desliga o atuador (GPIO2 = LOW)
+		wait 400
+		wait 400  
+
+	measure:
+		stage_rst    //stage_cnt = 0
+
+		wait_hx:
+			READ_RTC_REG(RTC_GPIO_IN_REG, RTC_GPIO_IN_NEXT_S+6, 1)//Le o estado do GPIO e guarda no R0
+			jumpr wait_hx, 1, ge//Espera até o GPIO estar em nível baixo
+
+		//Aqui sera feito um laco FOR() para 24 leituras
+        1:
+			stage_inc 1    //stage_cnt++
+			WRITE_RTC_REG(RTC_GPIO_OUT_W1TS_REG, RTC_GPIO_OUT_DATA_W1TS_S+7, 1, 1)//Desliga o atuador (GPIO2 = LOW)
+			wait 400    
+			WRITE_RTC_REG(RTC_GPIO_OUT_W1TC_REG, RTC_GPIO_OUT_DATA_W1TC_S+7, 1, 1)//Ativa o atuador (GPIO2 = HIGH)
+			READ_RTC_REG(RTC_GPIO_IN_REG, RTC_GPIO_IN_NEXT_S+6, 1)//Le o estado do GPIO0 e guarda no R0
+			wait 400
+		jumps 1b, 24, lt        //retorna a label 1 enquanto stage_cnt < 24
+
+		WRITE_RTC_REG(RTC_GPIO_OUT_W1TS_REG, RTC_GPIO_OUT_DATA_W1TS_S+7, 1, 1)//Desliga o atuador (GPIO2 = LOW)
+		wait 400    
+		WRITE_RTC_REG(RTC_GPIO_OUT_W1TC_REG, RTC_GPIO_OUT_DATA_W1TC_S+7, 1, 1)//Ativa o atuador (GPIO2 = HIGH)
+		wait 400
+
+		WRITE_RTC_REG(RTC_GPIO_OUT_W1TS_REG, RTC_GPIO_OUT_DATA_W1TS_S+7, 1, 1)//Desliga o atuador (GPIO2 = LOW) 
+
+		//wake    //Acorda o sistema principal
+        halt    //Encerra o codigo do ULP, mas iniciara novamente apos 100ms

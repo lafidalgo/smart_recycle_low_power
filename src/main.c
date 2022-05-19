@@ -153,7 +153,7 @@ static void init_ulp_program(void)
     /* Set ULP wake up period to T = 20ms.
      * Minimum pulse width has to be T * (ulp_debounce_counter + 1) = 80ms.
      */
-    ulp_set_wakeup_period(0, 20000);
+    ulp_set_wakeup_period(0, 10000000);
 
     /* Start the program */
     err = ulp_run(&ulp_main - RTC_SLOW_MEM);
