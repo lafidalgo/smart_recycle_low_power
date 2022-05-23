@@ -93,10 +93,13 @@ void app_main(void)
     printf("Enabling ULP wakeup\n");
     ESP_ERROR_CHECK(esp_sleep_enable_ulp_wakeup());
 
-    // Isolate GPIO12 pin from external circuits. This is needed for modules
-    // which have an external pull-up resistor on GPIO12 (such as ESP32-WROVER)
-    // to minimize current consumption.
+    /* Disconnect GPIO12 and GPIO15 to remove current drain through
+     * pullup/pulldown resistors.
+     * GPIO12 may be pulled high to select flash voltage.
+     */
     rtc_gpio_isolate(GPIO_NUM_12);
+    rtc_gpio_isolate(GPIO_NUM_15);
+    esp_deep_sleep_disable_rom_logging(); // suppress boot messages
 
     printf("Entering deep sleep\n");
     gettimeofday(&sleep_enter_time, NULL);
@@ -112,32 +115,6 @@ static void init_ulp_program(void)
 
     /* GPIO used for do input. */
     gpio_num_t gpio_num_addo = GPIO_NUM_25;
-    int rtcio_num_addo = rtc_io_number_get(gpio_num_addo);
-    assert(rtc_gpio_is_valid_gpio(gpio_num_addo) && "GPIO used for do must be an RTC IO");
-
-    /* GPIO used for sk input. */
-    gpio_num_t gpio_num_adsk = GPIO_NUM_26;
-    int rtcio_num_adsk = rtc_io_number_get(gpio_num_adsk);
-    assert(rtc_gpio_is_valid_gpio(gpio_num_adsk) && "GPIO used for sk must be an RTC IO");
-
-    /* Initialize some variables used by ULP program.
-     * Each 'ulp_xyz' variable corresponds to 'xyz' variable in the ULP program.
-     * These variables are declared in an auto generated header file,
-     * 'ulp_main.h', name of this file is defined in component.mk as ULP_APP_NAME.
-     * These variables are located in RTC_SLOW_MEM and can be accessed both by the
-     * ULP and the main CPUs.
-     *
-     * Note that the ULP reads only the lower 16 bits of these variables.
-     */
-    // ulp_io_number_addo = rtcio_num_addo; /* map from GPIO# to RTC_IO# */
-    // ulp_io_number_adsk = rtcio_num_adsk; /* map from GPIO# to RTC_IO# */
-    //Acorda quando o valor medido é maior que o definido por Over
-    ulp_trshHoldOverADMSB = 211;
-    ulp_trshHoldOverADLSB = 30196;
-    //Acorda quando o valor medido é menor que o definido por Under
-    ulp_trshHoldUnderADMSB = 209;
-    ulp_trshHoldUnderADLSB = 60000;
-
     /* Initialize selected GPIO as RTC IO, enable input, disable pullup and pulldown */
     rtc_gpio_init(gpio_num_addo);
     rtc_gpio_set_direction(gpio_num_addo, RTC_GPIO_MODE_INPUT_ONLY);
@@ -145,6 +122,8 @@ static void init_ulp_program(void)
     rtc_gpio_pullup_dis(gpio_num_addo);
     rtc_gpio_hold_en(gpio_num_addo);
 
+    /* GPIO used for sk output. */
+    gpio_num_t gpio_num_adsk = GPIO_NUM_26;
     /* Initialize selected GPIO as RTC IO, enable output, disable pullup and pulldown */
     rtc_gpio_init(gpio_num_adsk);
     rtc_gpio_set_direction(gpio_num_adsk, RTC_GPIO_MODE_OUTPUT_ONLY);
@@ -152,18 +131,14 @@ static void init_ulp_program(void)
     rtc_gpio_pullup_dis(gpio_num_adsk);
     rtc_gpio_hold_en(gpio_num_adsk);
 
-    /* Disconnect GPIO12 and GPIO15 to remove current drain through
-     * pullup/pulldown resistors.
-     * GPIO12 may be pulled high to select flash voltage.
-     */
-    // rtc_gpio_isolate(GPIO_NUM_12);
-    // rtc_gpio_isolate(GPIO_NUM_15);
-    // esp_deep_sleep_disable_rom_logging(); // suppress boot messages
+    // Acorda quando o valor medido é maior que o definido por Over
+    ulp_trshHoldOverADMSB = 211;
+    ulp_trshHoldOverADLSB = 30196;
+    // Acorda quando o valor medido é menor que o definido por Under
+    ulp_trshHoldUnderADMSB = 209;
+    ulp_trshHoldUnderADLSB = 60000;
 
-    /* Set ULP wake up period to T = 20ms.
-     * Minimum pulse width has to be T * (ulp_debounce_counter + 1) = 80ms.
-     */
-    ulp_set_wakeup_period(0, 1000000);
+    ulp_set_wakeup_period(0, 1000000); // Set ULP wake up period T = 1s
 
     /* Start the program */
     err = ulp_run(&ulp_main - RTC_SLOW_MEM);
