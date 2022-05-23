@@ -131,10 +131,12 @@ static void init_ulp_program(void)
      */
     // ulp_io_number_addo = rtcio_num_addo; /* map from GPIO# to RTC_IO# */
     // ulp_io_number_adsk = rtcio_num_adsk; /* map from GPIO# to RTC_IO# */
+    //Acorda quando o valor medido é maior que o definido por Over
     ulp_trshHoldOverADMSB = 211;
     ulp_trshHoldOverADLSB = 30196;
-    ulp_trshHoldUnderADMSB = 208;
-    ulp_trshHoldUnderADLSB = 30196;
+    //Acorda quando o valor medido é menor que o definido por Under
+    ulp_trshHoldUnderADMSB = 209;
+    ulp_trshHoldUnderADLSB = 60000;
 
     /* Initialize selected GPIO as RTC IO, enable input, disable pullup and pulldown */
     rtc_gpio_init(gpio_num_addo);
