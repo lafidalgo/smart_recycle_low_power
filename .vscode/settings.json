@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "gpio.h": "c",
+        "esp_sleep.h": "c",
+        "ulp_main.h": "c",
+        "rtc.h": "c"
+    }
+}

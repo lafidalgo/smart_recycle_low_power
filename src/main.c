@@ -1,33 +1,94 @@
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/event_groups.h"
+
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
 #include "esp_sleep.h"
+#include "esp_log.h"
+
 #include "nvs.h"
 #include "nvs_flash.h"
+
 #include "soc/rtc_cntl_reg.h"
 #include "soc/sens_reg.h"
 #include "soc/rtc_periph.h"
+#include "soc/soc_caps.h"
+#include "soc/rtc.h"
+
+#include <time.h>
+#include <sys/time.h>
+
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
+
 #include "esp32/ulp.h"
 #include "ulp_main.h"
 
-#include <string.h>
-#include <stdlib.h>
-#include <time.h>
-#include <sys/time.h>
 #include "sdkconfig.h"
-#include "soc/soc_caps.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "esp_log.h"
-#include "soc/rtc.h"
+
+#define BIT_0	( 1 << 0 )
+#define BIT_1	( 1 << 1 )
 
 extern const uint8_t ulp_main_bin_start[] asm("_binary_ulp_main_bin_start");
 extern const uint8_t ulp_main_bin_end[] asm("_binary_ulp_main_bin_end");
 
 static RTC_DATA_ATTR struct timeval sleep_enter_time;
 
+/*Variáveis para armazenamento do handle das tasks, queues, semaphores, timers e event groups*/
+TaskHandle_t taskEnterDeepSleepHandle = NULL;
+
+EventGroupHandle_t xEventGroupDeepSleep;
+
+//******************** FUNCTIONS ********************
 static void init_ulp_program(void);
 
+//******************** TASKS ********************
+void enterDeepSleepTask(void *pvParameters)
+{
+    while(1){
+        xEventGroupWaitBits(
+                xEventGroupDeepSleep,   /* The event group being tested. */
+                BIT_0 | BIT_1, /* The bits within the event group to wait for. */
+                pdTRUE,        /* BIT_0 & BIT_1 should be cleared before returning. */
+                pdTRUE,       /* Wait for both bits. */
+                portMAX_DELAY );/* Wait a maximum of 100ms for either bit to be set. */
+
+        const int wakeup_time_sec = 20;
+        printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
+        esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000);
+
+        const int ext_wakeup_pin_1 = 2;
+        const uint64_t ext_wakeup_pin_1_mask = 1ULL << ext_wakeup_pin_1;
+        const int ext_wakeup_pin_2 = 4;
+        const uint64_t ext_wakeup_pin_2_mask = 1ULL << ext_wakeup_pin_2;
+        const int ext_wakeup_pin_3 = 15;
+        const uint64_t ext_wakeup_pin_3_mask = 1ULL << ext_wakeup_pin_3;
+
+        printf("Enabling EXT1 wakeup on pins GPIO%d, GPIO%d, GPIO%d\n", ext_wakeup_pin_1, ext_wakeup_pin_2, ext_wakeup_pin_3);
+        esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_1_mask | ext_wakeup_pin_2_mask | ext_wakeup_pin_3_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
+
+        printf("Enabling ULP wakeup\n");
+        ESP_ERROR_CHECK(esp_sleep_enable_ulp_wakeup());
+
+        /* Disconnect GPIO12 and GPIO15 to remove current drain through
+        * pullup/pulldown resistors.
+        * GPIO12 may be pulled high to select flash voltage.
+        */
+        rtc_gpio_isolate(GPIO_NUM_12);
+        rtc_gpio_isolate(GPIO_NUM_15);
+        esp_deep_sleep_disable_rom_logging(); // suppress boot messages
+
+        printf("Entering deep sleep\n");
+        gettimeofday(&sleep_enter_time, NULL);
+
+        esp_deep_sleep_start();
+    }
+}
+
+//******************** App Main ********************
 void app_main(void)
 {
     struct timeval now;
@@ -76,35 +137,16 @@ void app_main(void)
 
     vTaskDelay(1000 / portTICK_PERIOD_MS);
 
-    const int wakeup_time_sec = 20;
-    printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
-    esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000);
+    /*Criação Event Groups*/
+    xEventGroupDeepSleep = xEventGroupCreate();
+    if( xEventGroupDeepSleep == NULL )
+    {
+        printf("The event group was not created.");
+    }
 
-    const int ext_wakeup_pin_1 = 2;
-    const uint64_t ext_wakeup_pin_1_mask = 1ULL << ext_wakeup_pin_1;
-    const int ext_wakeup_pin_2 = 4;
-    const uint64_t ext_wakeup_pin_2_mask = 1ULL << ext_wakeup_pin_2;
-    const int ext_wakeup_pin_3 = 15;
-    const uint64_t ext_wakeup_pin_3_mask = 1ULL << ext_wakeup_pin_3;
-
-    printf("Enabling EXT1 wakeup on pins GPIO%d, GPIO%d, GPIO%d\n", ext_wakeup_pin_1, ext_wakeup_pin_2, ext_wakeup_pin_3);
-    esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_1_mask | ext_wakeup_pin_2_mask | ext_wakeup_pin_3_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
-
-    printf("Enabling ULP wakeup\n");
-    ESP_ERROR_CHECK(esp_sleep_enable_ulp_wakeup());
-
-    /* Disconnect GPIO12 and GPIO15 to remove current drain through
-     * pullup/pulldown resistors.
-     * GPIO12 may be pulled high to select flash voltage.
-     */
-    rtc_gpio_isolate(GPIO_NUM_12);
-    rtc_gpio_isolate(GPIO_NUM_15);
-    esp_deep_sleep_disable_rom_logging(); // suppress boot messages
-
-    printf("Entering deep sleep\n");
-    gettimeofday(&sleep_enter_time, NULL);
-
-    esp_deep_sleep_start();
+    /*Criação Tasks*/
+    xTaskCreate(enterDeepSleepTask, "enterDeepSleepTask", configMINIMAL_STACK_SIZE * 5, NULL, 5, &taskEnterDeepSleepHandle);
+    xEventGroupSetBits( xEventGroupDeepSleep, BIT_0 | BIT_1 );
 }
 
 static void init_ulp_program(void)
