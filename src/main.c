@@ -64,6 +64,8 @@ void app_main(void)
         printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
         uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
         printf("Valor Total: %d\n", HX711Total);
+        uint32_t thresholdType_ulp = (ulp_thresholdType & UINT16_MAX);
+        printf("Tipo threshold: %d\n", thresholdType_ulp);
         break;
     }
     case ESP_SLEEP_WAKEUP_UNDEFINED:
@@ -127,14 +129,12 @@ static void init_ulp_program(void)
      *
      * Note that the ULP reads only the lower 16 bits of these variables.
      */
-    // ulp_debounce_counter = 3;
-    // ulp_debounce_max_count = 3;
-    // ulp_next_edge = 0;
     // ulp_io_number_addo = rtcio_num_addo; /* map from GPIO# to RTC_IO# */
     // ulp_io_number_adsk = rtcio_num_adsk; /* map from GPIO# to RTC_IO# */
-    // ulp_edge_count_to_wake_up = 10;
-    //ulp_trshHoldADMSB = 209;
-    //ulp_trshHoldADLSB = 30196;
+    ulp_trshHoldOverADMSB = 211;
+    ulp_trshHoldOverADLSB = 30196;
+    ulp_trshHoldUnderADMSB = 208;
+    ulp_trshHoldUnderADLSB = 30196;
 
     /* Initialize selected GPIO as RTC IO, enable input, disable pullup and pulldown */
     rtc_gpio_init(gpio_num_addo);

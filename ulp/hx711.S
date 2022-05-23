@@ -13,31 +13,27 @@ HX711HiWord:
 HX711LoWord:
 .long 0x00
 
+.global trshHoldOverADMSB 
+trshHoldOverADMSB:
+.long 0x00
+
+.global trshHoldOverADLSB
+trshHoldOverADLSB:
+.long 0x00
+
+.global trshHoldUnderADMSB 
+trshHoldUnderADMSB:
+.long 0x00
+
+.global trshHoldUnderADLSB
+trshHoldUnderADLSB:
+.long 0x00
+
+.global thresholdType
+thresholdType:
+.long 0x00
+
 .bss//Variaveis sao declaradas dentro da secao .bss
-
-.global bytelsb
-bytelsb:
-.long 0
-
-.global bytemsb
-bytemsb:
-.long 0
-
-.global valorADMSB
-valorADMSB:
-.long 0
-
-.global valorADLSB
-valorADLSB:
-.long 0
-
-.global debugVar
-debugVar:
-.long 0
-
-.global contador
-contador:
-.long 0
 
 .text//O codigo é feito dentro da secao .text
  
@@ -95,3 +91,49 @@ contador:
 		SCLK_high               // 128 on next HX711 read, then leave SCLK hi for
 		SCLK_low                // for > 60 uS to power down HX711, ~10 clocks
 		SCLK_high
+
+	compare_trshHoldOver:
+		move r3, thresholdType
+		move r0, 0x01
+		st r0, r3, 0
+		move r2, trshHoldOverADMSB
+		ld r2, r2, 0
+		move r3, HX711HiWord
+		ld r3, r3, 0
+		sub r0, r2, r3
+		jumpr msb_igual_over, 0, eq
+		jump wake_up, ov // overflow significa que r3 > r2 portanto vloadAD > threshHold
+		// msb ad menor q threshhold
+		jump compare_trshHoldUnder
+
+	msb_igual_over:
+		move r2, trshHoldOverADLSB
+		ld r2, r2, 0
+		move r3, HX711LoWord
+		ld r3, r3, 0
+		sub r0, r2, r3
+		jump wake_up, ov // overflow significa que r3 > r2 portanto vloadAD > threshHold
+		jump compare_trshHoldUnder
+
+	compare_trshHoldUnder:
+		move r3, thresholdType
+		move r0, 0x02
+		st r0, r3, 0
+		move r2, trshHoldUnderADMSB
+		ld r2, r2, 0
+		move r3, HX711HiWord
+		ld r3, r3, 0
+		sub r0, r3, r2
+		jumpr msb_igual_under, 0, eq
+		jump wake_up, ov // overflow significa que r3 > r2 portanto threshHold > vloadAD
+		// msb ad menor q threshhold
+		halt
+
+	msb_igual_under:
+		move r2, trshHoldUnderADLSB
+		ld r2, r2, 0
+		move r3, HX711LoWord
+		ld r3, r3, 0
+		sub r0, r3, r2
+		jump wake_up, ov // overflow significa que r3 > r2 portanto threshHold > vloadAD
+		halt
