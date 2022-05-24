@@ -33,10 +33,15 @@
 #define BIT_1 (1 << 1)
 #define BIT_2 (1 << 2)
 
+#define weightReference 2000 // 2 kg
+
 extern const uint8_t ulp_main_bin_start[] asm("_binary_ulp_main_bin_start");
 extern const uint8_t ulp_main_bin_end[] asm("_binary_ulp_main_bin_end");
 
 static RTC_DATA_ATTR struct timeval sleep_enter_time;
+static RTC_DATA_ATTR uint32_t tare;
+static RTC_DATA_ATTR int32_t calibration;
+static RTC_DATA_ATTR int32_t unitWeight;
 
 const int ext_wakeup_pin_1 = 2;
 const int ext_wakeup_pin_2 = 4;
@@ -106,6 +111,8 @@ void tareTask(void *pvParameters)
         printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
         uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
         printf("Valor Total: %d\n", HX711Total);
+        tare = HX711Total;
+        printf("Valor tara: %d\n", tare);
         xEventGroupSetBits(xEventGroupDeepSleep, BIT_0);
     }
 }
@@ -122,6 +129,9 @@ void calibrateTask(void *pvParameters)
         printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
         uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
         printf("Valor Total: %d\n", HX711Total);
+        printf("Valor tara: %d\n", tare);
+        calibration = (HX711Total - tare);
+        printf("Valor calibração: %d\n", calibration);
         xEventGroupSetBits(xEventGroupDeepSleep, BIT_1);
     }
 }
@@ -138,6 +148,8 @@ void setUnitTask(void *pvParameters)
         printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
         uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
         printf("Valor Total: %d\n", HX711Total);
+        unitWeight = (HX711Total - tare);
+        printf("Valor unitário: %d\n", unitWeight);
         xEventGroupSetBits(xEventGroupDeepSleep, BIT_2);
     }
 }
@@ -251,7 +263,7 @@ static void init_ulp_program(void)
     ulp_trshHoldOverADMSB = 211;
     ulp_trshHoldOverADLSB = 30196;
     // Acorda quando o valor medido é menor que o definido por Under
-    ulp_trshHoldUnderADMSB = 209;
+    ulp_trshHoldUnderADMSB = 208;
     ulp_trshHoldUnderADLSB = 60000;
 
     ulp_set_wakeup_period(0, 1000000); // Set ULP wake up period T = 1s
