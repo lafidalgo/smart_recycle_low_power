@@ -29,16 +29,24 @@
 
 #include "sdkconfig.h"
 
-#define BIT_0	( 1 << 0 )
-#define BIT_1	( 1 << 1 )
+#define BIT_0 (1 << 0)
+#define BIT_1 (1 << 1)
+#define BIT_2 (1 << 2)
 
 extern const uint8_t ulp_main_bin_start[] asm("_binary_ulp_main_bin_start");
 extern const uint8_t ulp_main_bin_end[] asm("_binary_ulp_main_bin_end");
 
 static RTC_DATA_ATTR struct timeval sleep_enter_time;
 
+const int ext_wakeup_pin_1 = 2;
+const int ext_wakeup_pin_2 = 4;
+const int ext_wakeup_pin_3 = 13;
+
 /*Variáveis para armazenamento do handle das tasks, queues, semaphores, timers e event groups*/
 TaskHandle_t taskEnterDeepSleepHandle = NULL;
+TaskHandle_t taskTareHandle = NULL;
+TaskHandle_t taskCalibrateHandle = NULL;
+TaskHandle_t taskSetUnitHandle = NULL;
 
 EventGroupHandle_t xEventGroupDeepSleep;
 
@@ -48,23 +56,21 @@ static void init_ulp_program(void);
 //******************** TASKS ********************
 void enterDeepSleepTask(void *pvParameters)
 {
-    while(1){
+    while (1)
+    {
         xEventGroupWaitBits(
-                xEventGroupDeepSleep,   /* The event group being tested. */
-                BIT_0 | BIT_1, /* The bits within the event group to wait for. */
-                pdTRUE,        /* BIT_0 & BIT_1 should be cleared before returning. */
-                pdTRUE,       /* Wait for both bits. */
-                portMAX_DELAY );/* Wait a maximum of 100ms for either bit to be set. */
+            xEventGroupDeepSleep,  /* The event group being tested. */
+            BIT_0 | BIT_1 | BIT_2, /* The bits within the event group to wait for. */
+            pdTRUE,                /* BIT_0 & BIT_1 & BIT_2 should be cleared before returning. */
+            pdTRUE,                /* Wait for both bits. */
+            portMAX_DELAY);        /* Wait a maximum of 100ms for either bit to be set. */
 
         const int wakeup_time_sec = 20;
         printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
         esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000);
 
-        const int ext_wakeup_pin_1 = 2;
         const uint64_t ext_wakeup_pin_1_mask = 1ULL << ext_wakeup_pin_1;
-        const int ext_wakeup_pin_2 = 4;
         const uint64_t ext_wakeup_pin_2_mask = 1ULL << ext_wakeup_pin_2;
-        const int ext_wakeup_pin_3 = 15;
         const uint64_t ext_wakeup_pin_3_mask = 1ULL << ext_wakeup_pin_3;
 
         printf("Enabling EXT1 wakeup on pins GPIO%d, GPIO%d, GPIO%d\n", ext_wakeup_pin_1, ext_wakeup_pin_2, ext_wakeup_pin_3);
@@ -74,9 +80,9 @@ void enterDeepSleepTask(void *pvParameters)
         ESP_ERROR_CHECK(esp_sleep_enable_ulp_wakeup());
 
         /* Disconnect GPIO12 and GPIO15 to remove current drain through
-        * pullup/pulldown resistors.
-        * GPIO12 may be pulled high to select flash voltage.
-        */
+         * pullup/pulldown resistors.
+         * GPIO12 may be pulled high to select flash voltage.
+         */
         rtc_gpio_isolate(GPIO_NUM_12);
         rtc_gpio_isolate(GPIO_NUM_15);
         esp_deep_sleep_disable_rom_logging(); // suppress boot messages
@@ -88,12 +94,73 @@ void enterDeepSleepTask(void *pvParameters)
     }
 }
 
+void tareTask(void *pvParameters)
+{
+    while (1)
+    {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        printf("Tare Task.\n");
+        uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
+        printf("Valor ADMSB: %d\n", HX711HiWord_ulp);
+        uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
+        printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
+        uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
+        printf("Valor Total: %d\n", HX711Total);
+        xEventGroupSetBits(xEventGroupDeepSleep, BIT_0);
+    }
+}
+
+void calibrateTask(void *pvParameters)
+{
+    while (1)
+    {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        printf("Calibrate Task.\n");
+        uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
+        printf("Valor ADMSB: %d\n", HX711HiWord_ulp);
+        uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
+        printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
+        uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
+        printf("Valor Total: %d\n", HX711Total);
+        xEventGroupSetBits(xEventGroupDeepSleep, BIT_1);
+    }
+}
+
+void setUnitTask(void *pvParameters)
+{
+    while (1)
+    {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        printf("Set Unit Task.\n");
+        uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
+        printf("Valor ADMSB: %d\n", HX711HiWord_ulp);
+        uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
+        printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
+        uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
+        printf("Valor Total: %d\n", HX711Total);
+        xEventGroupSetBits(xEventGroupDeepSleep, BIT_2);
+    }
+}
+
 //******************** App Main ********************
 void app_main(void)
 {
     struct timeval now;
     gettimeofday(&now, NULL);
     int sleep_time_ms = (now.tv_sec - sleep_enter_time.tv_sec) * 1000 + (now.tv_usec - sleep_enter_time.tv_usec) / 1000;
+
+    /*Criação Event Groups*/
+    xEventGroupDeepSleep = xEventGroupCreate();
+    if (xEventGroupDeepSleep == NULL)
+    {
+        printf("The event group was not created.");
+    }
+    xEventGroupSetBits(xEventGroupDeepSleep, BIT_0 | BIT_1 | BIT_2);
+
+    /*Criação Tasks*/
+    xTaskCreate(tareTask, "tareTask", configMINIMAL_STACK_SIZE * 3, NULL, 5, &taskTareHandle);
+    xTaskCreate(calibrateTask, "calibrateTask", configMINIMAL_STACK_SIZE * 3, NULL, 5, &taskCalibrateHandle);
+    xTaskCreate(setUnitTask, "setUnitTask", configMINIMAL_STACK_SIZE * 3, NULL, 5, &taskSetUnitHandle);
 
     switch (esp_sleep_get_wakeup_cause())
     {
@@ -104,6 +171,21 @@ void app_main(void)
         {
             int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
             printf("Wake up from GPIO %d\n", pin);
+            switch (pin)
+            {
+            case ext_wakeup_pin_1:
+                xEventGroupClearBits(xEventGroupDeepSleep, BIT_0);
+                xTaskNotifyGive(taskTareHandle);
+                break;
+            case ext_wakeup_pin_2:
+                xEventGroupClearBits(xEventGroupDeepSleep, BIT_1);
+                xTaskNotifyGive(taskCalibrateHandle);
+                break;
+            case ext_wakeup_pin_3:
+                xEventGroupClearBits(xEventGroupDeepSleep, BIT_2);
+                xTaskNotifyGive(taskSetUnitHandle);
+                break;
+            }
         }
         else
         {
@@ -137,16 +219,8 @@ void app_main(void)
 
     vTaskDelay(1000 / portTICK_PERIOD_MS);
 
-    /*Criação Event Groups*/
-    xEventGroupDeepSleep = xEventGroupCreate();
-    if( xEventGroupDeepSleep == NULL )
-    {
-        printf("The event group was not created.");
-    }
-
-    /*Criação Tasks*/
+    /*Criação Task Deep Sleep*/
     xTaskCreate(enterDeepSleepTask, "enterDeepSleepTask", configMINIMAL_STACK_SIZE * 5, NULL, 5, &taskEnterDeepSleepHandle);
-    xEventGroupSetBits( xEventGroupDeepSleep, BIT_0 | BIT_1 );
 }
 
 static void init_ulp_program(void)
